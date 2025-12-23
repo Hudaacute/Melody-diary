@@ -4,58 +4,79 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>My Melody's Pink Diary</title>
+    <title>My Melody's Pink Diary 🎀</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
       body {
         font-family: 'Quicksand', sans-serif;
         background-color: #fff5f7;
+        margin: 0;
+        padding: 0;
         overflow-x: hidden;
       }
-      .cloud-shape {
-        border-radius: 50% 50% 50% 50% / 60% 60% 40% 40%;
+      #loading-screen {
+        position: fixed;
+        inset: 0;
+        background: #fff5f7;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        z-index: 9999;
+        transition: opacity 0.5s ease;
+      }
+      .heart-loader {
+        width: 60px;
+        height: 60px;
+        background: #ffb7c5;
         position: relative;
+        transform: rotate(45deg);
+        animation: heartBeat 1.2s infinite ease-in-out;
       }
-      .cloud-shape::before, .cloud-shape::after {
-        content: '';
-        position: absolute;
-        background: inherit;
+      .heart-loader::before, .heart-loader::after {
+        content: "";
+        width: 60px;
+        height: 60px;
+        background: #ffb7c5;
         border-radius: 50%;
+        position: absolute;
       }
-      .glass-pink {
-        background: rgba(255, 255, 255, 0.7);
-        backdrop-filter: blur(10px);
-        border: 1px solid rgba(255, 182, 193, 0.3);
-      }
-      .soft-3d-shadow {
-        box-shadow: 0 10px 25px -5px rgba(255, 182, 193, 0.4), 0 8px 10px -6px rgba(255, 182, 193, 0.4);
+      .heart-loader::before { left: -30px; }
+      .heart-loader::after { top: -30px; }
+      @keyframes heartBeat {
+        0% { transform: rotate(45deg) scale(0.8); }
+        15% { transform: rotate(45deg) scale(1.1); }
+        100% { transform: rotate(45deg) scale(0.8); }
       }
       .melody-gradient {
         background: linear-gradient(135deg, #ffd1dc 0%, #ffb7c5 100%);
       }
-      .sticker-float {
-        animation: float 3s ease-in-out infinite;
-      }
-      @keyframes float {
-        0% { transform: translateY(0px); }
-        50% { transform: translateY(-10px); }
-        100% { transform: translateY(0px); }
+      .soft-3d-shadow {
+        box-shadow: 0 15px 35px -5px rgba(255, 182, 193, 0.4);
       }
     </style>
-  <script type="importmap">
+    <script type="importmap">
 {
   "imports": {
-    "react": "https://esm.sh/react@^19.2.3",
-    "react/": "https://esm.sh/react@^19.2.3/",
-    "lucide-react": "https://esm.sh/lucide-react@^0.562.0",
+    "react": "https://esm.sh/react@19.0.0",
+    "react-dom": "https://esm.sh/react-dom@19.0.0",
+    "react-dom/client": "https://esm.sh/react-dom@19.0.0/client",
+    "lucide-react": "https://esm.sh/lucide-react@0.460.0",
     "react-dom/": "https://esm.sh/react-dom@^19.2.3/",
+    "react/": "https://esm.sh/react@^19.2.3/",
     "@google/genai": "https://esm.sh/@google/genai@^1.34.0"
   }
 }
 </script>
-</head>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  </head>
   <body>
+    <div id="loading-screen">
+      <div class="heart-loader"></div>
+      <p style="margin-top: 40px; color: #ff8fa3; font-weight: bold;">Unlocking Secrets...</p>
+    </div>
     <div id="root"></div>
+    <script type="text/babel" data-type="module" src="index.tsx"></script>
   </body>
 </html>
