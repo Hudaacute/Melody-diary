@@ -1,0 +1,7 @@
+{
+  "name": "Melody Diary",
+  "description": "A super cute, soft-pink themed 3D diary and social app for friends, featuring cloudy inputs, stickers, and group chats.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}
