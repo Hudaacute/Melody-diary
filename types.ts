@@ -1,5 +1,13 @@
 
-export type Visibility = 'private' | 'public';
+export type Visibility = 'private' | 'public' | 'group';
+
+export interface Comment {
+  id: string;
+  userName: string;
+  userPfp: string;
+  text: string;
+  timestamp: number;
+}
 
 export interface Decoration {
   id: string;
@@ -17,8 +25,11 @@ export interface DiaryEntry {
   text: string;
   imageUrl?: string;
   visibility: Visibility;
+  groupId?: string; // If visibility is 'group', this ID links it
   timestamp: number;
   decorations: Decoration[];
+  likes: string[]; // Array of User IDs
+  comments: Comment[];
 }
 
 export interface UserProfile {
@@ -26,7 +37,7 @@ export interface UserProfile {
   username: string;
   email: string;
   pfp: string;
-  friends: string[]; // List of user IDs
+  friends: string[];
   pendingRequests: string[];
   lastActive: string;
   isAdmin?: boolean;
@@ -35,7 +46,7 @@ export interface UserProfile {
 export interface Group {
   id: string;
   name: string;
-  members: string[]; // List of user IDs
+  members: string[];
   ownerId: string;
   isPublic: boolean;
 }
@@ -44,7 +55,7 @@ export interface ChatMessage {
   id: string;
   userId: string;
   userName: string;
-  groupId: string; // Group this message belongs to
+  groupId: string;
   text: string;
   timestamp: number;
 }
