@@ -1,52 +1,43 @@
-
+   
 import React, { useState, useEffect } from 'react';
-import { DiaryEntry, UserProfile, ChatMessage, Visibility, Decoration, Group } from './types';
+import { DiaryEntry, UserProfile, ChatMessage, Visibility, Decoration, Group, Comment } from './types';
 import { CloudDiaryEditor } from './components/CloudDiaryEditor';
 import { DiaryList } from './components/DiaryList';
 import { SocialHub } from './components/SocialHub';
 import { AdminDashboard } from './components/AdminDashboard';
 import { ProfileModal } from './components/ProfileModal';
 import { AccessWall } from './components/AccessWall';
+import { RegistrationForm } from './components/RegistrationForm';
 import { User, Bell, Heart, ShieldAlert } from 'lucide-react';
 
-const ADMIN_EMAIL = "admin@pink.diary"; 
-const PRIVATE_SECRET_KEY = "2010"; // NEW SECRET CODE FOR FRIENDS
-const ADMIN_CODE = "1803"; // NEW ADMIN CODE
-
-const MOCK_REGISTRY: UserProfile[] = [
-  { id: 'me', username: 'MelodySweetie', email: ADMIN_EMAIL, pfp: 'https://picsum.photos/seed/me/200', friends: ['user1', 'user2'], pendingRequests: ['req1'], lastActive: 'Just now', isAdmin: true },
-  { id: 'user1', username: 'CloudCuddle', email: 'cloud@friend.com', pfp: 'https://picsum.photos/seed/user1/200', friends: ['me'], pendingRequests: [], lastActive: '2m ago' },
-  { id: 'user2', username: 'PinkBow', email: 'bow@friend.com', pfp: 'https://picsum.photos/seed/user2/200', friends: ['me'], pendingRequests: [], lastActive: '10m ago' },
-  { id: 'user3', username: 'BerryBunny', email: 'berry@friend.com', pfp: 'https://picsum.photos/seed/berry/100', friends: [], pendingRequests: [], lastActive: 'Offline' },
-];
-
-const MOCK_ALL_GROUPS: Group[] = [
-  { id: 'besties', name: 'Pink Besties 🎀', members: ['me', 'user1', 'user2'], ownerId: 'me', isPublic: true },
-  { id: 'cloud_lovers', name: 'Cloud Lovers ☁️', members: ['user1', 'user3'], ownerId: 'user1', isPublic: true },
-  { id: 'sweet_secrets', name: 'Sweet Secrets 🍭', members: ['user2'], ownerId: 'user2', isPublic: true },
-];
+const PRIVATE_SECRET_KEY = "2010";
+const ADMIN_CODE = "1803";
 
 const App: React.FC = () => {
-  const [profile, setProfile] = useState<UserProfile>(MOCK_REGISTRY[0]);
-  const [entries, setEntries] = useState<DiaryEntry[]>([]);
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [allGroups, setAllGroups] = useState<Group[]>(MOCK_ALL_GROUPS);
+  const savedProfile = localStorage.getItem('melody_profile');
+  const [profile, setProfile] = useState<UserProfile | null>(savedProfile ? JSON.parse(savedProfile) : null);
   
-  const [activeView, setActiveView] = useState<'all' | 'mine'>('all');
+  const [entries, setEntries] = useState<DiaryEntry[]>(() => {
+    const saved = localStorage.getItem('melody_entries');
+    return saved ? JSON.parse(saved) : [];
+  });
+  
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [allGroups, setAllGroups] = useState<Group[]>([]);
+  const [replyTarget, setReplyTarget] = useState<string | null>(null);
+  
   const [isAdminOpen, setIsAdminOpen] = useState(false);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [isAuthorized, setIsAuthorized] = useState(localStorage.getItem('melody_access_granted') === 'true');
 
-  // Filter groups user is a member of
-  const myGroups = allGroups.filter(g => g.members.includes(profile.id));
+  const myGroups = allGroups.filter(g => profile && g.members.includes(profile.id));
 
   useEffect(() => {
-    if (entries.length === 0) {
-      addEntry("Welcome to our pink dream world! 🎀✨ Start writing your first secret above!", 'public', undefined, []);
-    }
-  }, []);
+    localStorage.setItem('melody_entries', JSON.stringify(entries));
+  }, [entries]);
 
-  const addEntry = (text: string, visibility: Visibility, image?: string, decorations: Decoration[] = []) => {
+  const addEntry = (text: string, visibility: Visibility, image?: string, decorations: Decoration[] = [], groupId?: string) => {
+    if (!profile) return;
     const newEntry: DiaryEntry = {
       id: Date.now().toString(),
       userId: profile.id,
@@ -55,13 +46,57 @@ const App: React.FC = () => {
       text,
       imageUrl: image,
       visibility,
+      groupId,
       timestamp: Date.now(),
       decorations,
+      likes: [],
+      comments: [],
     };
     setEntries([newEntry, ...entries]);
+    setReplyTarget(null);
+  };
+
+  const handleDeleteEntry = (entryId: string) => {
+    if (confirm("Delete this sweet memory forever? 🎀")) {
+      setEntries(prev => prev.filter(e => e.id !== entryId));
+    }
+  };
+
+  const handleAddComment = (entryId: string, text: string) => {
+    if (!profile || !text.trim()) return;
+    const newComment: Comment = {
+      id: Date.now().toString(),
+      userName: profile.username,
+      userPfp: profile.pfp,
+      text,
+      timestamp: Date.now()
+    };
+    setEntries(prev => prev.map(e => e.id === entryId ? { ...e, comments: [...(e.comments || []), newComment] } : e));
+  };
+
+  const handleLikeEntry = (entryId: string) => {
+    if (!profile) return;
+    setEntries(prev => prev.map(entry => {
+      if (entry.id === entryId) {
+        const hasLiked = entry.likes.includes(profile.id);
+        return {
+          ...entry,
+          likes: hasLiked 
+            ? entry.likes.filter(id => id !== profile.id) 
+            : [...entry.likes, profile.id]
+        };
+      }
+      return entry;
+    }));
+  };
+
+  const handleReplyToEntry = (userName: string) => {
+    setReplyTarget(`@${userName} `);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const handleSendMessage = (text: string, groupId: string) => {
+    if (!profile) return;
     const newMsg: ChatMessage = {
       id: Date.now().toString(),
       userId: profile.id,
@@ -74,27 +109,26 @@ const App: React.FC = () => {
   };
 
   const updateProfile = (updates: Partial<UserProfile>) => {
-    setProfile({ ...profile, ...updates });
+    if (!profile) return;
+    const newProfile = { ...profile, ...updates };
+    setProfile(newProfile);
+    localStorage.setItem('melody_profile', JSON.stringify(newProfile));
   };
 
   const handleSendFriendRequest = (username: string) => {
-    alert(`🎀 Friend request sent to ${username}! Wait for them to say yes! ✨`);
-    if (username.toLowerCase().includes('berry')) {
-      setTimeout(() => {
-        setProfile(prev => ({ ...prev, friends: [...prev.friends, 'user3'] }));
-        alert("BerryBunny accepted your request! 🍓🐰");
-      }, 2000);
-    }
+    alert(`🎀 Friend request sent to ${username}!`);
   };
 
   const handleAcceptFriend = (requestId: string) => {
+    if (!profile) return;
     const newFriends = [...profile.friends, requestId];
     const newPending = profile.pendingRequests.filter(r => r !== requestId);
-    setProfile({ ...profile, friends: newFriends, pendingRequests: newPending });
+    updateProfile({ friends: newFriends, pendingRequests: newPending });
     alert(`Yay! You have a new bestie! 💖`);
   };
 
   const handleCreateGroup = (name: string, isPublic: boolean) => {
+    if (!profile) return;
     const newGroup: Group = {
       id: Date.now().toString(),
       name,
@@ -107,14 +141,13 @@ const App: React.FC = () => {
   };
 
   const handleJoinGroup = (groupId: string) => {
+    if (!profile) return;
     setAllGroups(prev => prev.map(g => {
-      if (g.id === groupId && !g.members.includes(profile.id)) {
-        return { ...g, members: [...g.members, profile.id] };
+      if (g.id === groupId && !g.members.includes(profile!.id)) {
+        return { ...g, members: [...g.members, profile!.id] };
       }
       return g;
     }));
-    const groupName = allGroups.find(g => g.id === groupId)?.name;
-    alert(`You've joined ${groupName}! 🎀✨ Start chatting!`);
   };
 
   const handleAddToGroup = (groupId: string, friendId: string) => {
@@ -124,57 +157,48 @@ const App: React.FC = () => {
       }
       return g;
     }));
-    const friend = MOCK_REGISTRY.find(u => u.id === friendId);
-    alert(`${friend?.username} added to the group! 🎀`);
   };
 
   const handleOpenAdmin = () => {
     const code = prompt("Enter Secret Admin Code: 🎀");
     if (code === ADMIN_CODE) {
+      updateProfile({ isAdmin: true });
       setIsAdminOpen(true);
     } else {
       alert("Oops! That's not the secret admin code! 🍬");
     }
   };
 
-  const friendsProfiles = MOCK_REGISTRY.filter(u => profile.friends.includes(u.id));
-
   if (!isAuthorized) {
     return <AccessWall secretKey={PRIVATE_SECRET_KEY} onAuthorized={() => setIsAuthorized(true)} />;
   }
+
+  if (!profile) {
+    return <RegistrationForm onComplete={setProfile} />;
+  }
+
+  const friendsProfiles: UserProfile[] = [
+    { id: 'f1', username: 'MelodyFan', email: 'm@fan.com', pfp: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=100&h=100&fit=crop', friends: [], pendingRequests: [], lastActive: '2m ago' },
+    { id: 'f2', username: 'PinkPuff', email: 'p@puff.com', pfp: 'https://images.unsplash.com/photo-1517841905240-472988babdf9?w=100&h=100&fit=crop', friends: [], pendingRequests: [], lastActive: '5m ago' }
+  ];
 
   return (
     <div className="min-h-screen pb-10 bg-[#fff5f7] animate-in fade-in duration-1000">
       <nav className="sticky top-0 z-50 glass-pink border-b border-pink-100 px-6 py-4 flex items-center justify-between">
         <div className="flex items-center space-x-3">
-          <div className="w-12 h-12 melody-gradient rounded-full flex items-center justify-center soft-3d-shadow">
+          <div className="w-12 h-12 melody-gradient rounded-full flex items-center justify-center soft-3d-shadow animate-pulse">
             <Heart className="text-white fill-white" size={24} />
           </div>
-          <h1 className="text-2xl font-black text-pink-500 tracking-tight hidden sm:block">Melody Diary</h1>
+          <h1 className="text-2xl font-black text-pink-500 tracking-tight hidden sm:block">My Secret Journal</h1>
         </div>
 
-        <div className="flex items-center bg-white rounded-full p-1.5 soft-3d-shadow border border-pink-50">
-          <button
-            onClick={() => setActiveView('all')}
-            className={`px-6 py-2 rounded-full font-bold text-sm transition-all ${activeView === 'all' ? 'melody-gradient text-white shadow-md' : 'text-pink-300 hover:text-pink-500'}`}
+        <div className="flex items-center space-x-4">
+          <button 
+            onClick={handleOpenAdmin} 
+            className={`p-3 rounded-full transition-all flex items-center gap-2 ${profile.isAdmin ? 'text-pink-600 bg-pink-100' : 'text-pink-300 hover:bg-pink-50'}`} 
+            title="Admin Hub"
           >
-            Feed
-          </button>
-          <button
-            onClick={() => setActiveView('mine')}
-            className={`px-6 py-2 rounded-full font-bold text-sm transition-all ${activeView === 'mine' ? 'melody-gradient text-white shadow-md' : 'text-pink-300 hover:text-pink-500'}`}
-          >
-            My Journal
-          </button>
-        </div>
-
-        <div className="flex items-center space-x-2">
-          {profile.email === ADMIN_EMAIL && (
-            <button onClick={handleOpenAdmin} className="p-3 text-pink-600 hover:bg-pink-100 rounded-full transition-all animate-pulse" title="Admin Hub"><ShieldAlert size={22} /></button>
-          )}
-          <button className="p-3 text-pink-400 hover:bg-white hover:shadow-sm rounded-full transition-all relative">
-            <Bell size={22} />
-            <span className="absolute top-2 right-2 w-3 h-3 bg-pink-500 border-2 border-white rounded-full"></span>
+            <ShieldAlert size={22} />
           </button>
           <div className="flex items-center space-x-2 pl-2 border-l border-pink-100 cursor-pointer hover:opacity-80 transition-opacity" onClick={() => setIsProfileOpen(true)}>
             <img src={profile.pfp} className="w-10 h-10 rounded-full border-2 border-pink-200 object-cover" alt="profile" />
@@ -186,18 +210,21 @@ const App: React.FC = () => {
       <main className="container mx-auto px-4 mt-8 flex flex-col xl:flex-row gap-8">
         <div className="flex-1 space-y-8">
           <section>
-            <CloudDiaryEditor onPost={addEntry} />
+            <CloudDiaryEditor onPost={addEntry} initialText={replyTarget || ''} />
           </section>
 
           <section>
             <div className="flex items-center justify-between mb-8 max-w-4xl mx-auto px-4">
-              <h2 className="text-3xl font-black text-pink-700">
-                {activeView === 'all' ? "Community Moments ✨" : "My Secret Diary 🎀"}
-              </h2>
+              <h2 className="text-3xl font-black text-pink-700">Entries</h2>
             </div>
             <DiaryList 
-              entries={activeView === 'all' ? entries : entries.filter(e => e.userId === profile.id)} 
+              entries={entries.filter(e => e.visibility !== 'group')} 
               currentUserId={profile.id} 
+              isAdmin={profile.isAdmin}
+              onLike={handleLikeEntry}
+              onReply={handleReplyToEntry}
+              onDelete={handleDeleteEntry}
+              onAddComment={handleAddComment}
             />
           </section>
         </div>
@@ -206,23 +233,20 @@ const App: React.FC = () => {
           profile={profile} 
           messages={messages} 
           groups={myGroups}
-          allGroups={allGroups}
+          allEntries={entries}
           friendsProfiles={friendsProfiles}
           onSendMessage={handleSendMessage}
           onAcceptFriend={handleAcceptFriend}
           onSendRequest={handleSendFriendRequest}
           onCreateGroup={handleCreateGroup}
           onAddToGroup={handleAddToGroup}
-          onJoinGroup={handleJoinGroup}
+          onPostToGroup={addEntry}
+          onDeleteEntry={handleDeleteEntry}
         />
       </main>
 
-      {isAdminOpen && <AdminDashboard users={MOCK_REGISTRY} onClose={() => setIsAdminOpen(false)} />}
+      {isAdminOpen && <AdminDashboard users={[profile, ...friendsProfiles]} onClose={() => setIsAdminOpen(false)} />}
       {isProfileOpen && <ProfileModal profile={profile} onSave={updateProfile} onClose={() => setIsProfileOpen(false)} />}
-
-      <button onClick={() => setIsProfileOpen(true)} className="xl:hidden fixed bottom-6 right-6 w-16 h-16 melody-gradient text-white rounded-full flex items-center justify-center soft-3d-shadow z-40">
-        <User size={30} />
-      </button>
     </div>
   );
 };
