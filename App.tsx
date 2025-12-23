@@ -1,4 +1,4 @@
-   
+
 import React, { useState, useEffect } from 'react';
 import { DiaryEntry, UserProfile, ChatMessage, Visibility, Decoration, Group, Comment } from './types';
 import { CloudDiaryEditor } from './components/CloudDiaryEditor';
@@ -8,7 +8,7 @@ import { AdminDashboard } from './components/AdminDashboard';
 import { ProfileModal } from './components/ProfileModal';
 import { AccessWall } from './components/AccessWall';
 import { RegistrationForm } from './components/RegistrationForm';
-import { User, Bell, Heart, ShieldAlert } from 'lucide-react';
+import { Heart, ShieldAlert, Sparkles } from 'lucide-react';
 
 const PRIVATE_SECRET_KEY = "2010";
 const ADMIN_CODE = "1803";
@@ -17,6 +17,11 @@ const App: React.FC = () => {
   const savedProfile = localStorage.getItem('melody_profile');
   const [profile, setProfile] = useState<UserProfile | null>(savedProfile ? JSON.parse(savedProfile) : null);
   
+  const [allUsers, setAllUsers] = useState<UserProfile[]>(() => {
+    const saved = localStorage.getItem('melody_all_users');
+    return saved ? JSON.parse(saved) : [];
+  });
+
   const [entries, setEntries] = useState<DiaryEntry[]>(() => {
     const saved = localStorage.getItem('melody_entries');
     return saved ? JSON.parse(saved) : [];
@@ -30,11 +35,34 @@ const App: React.FC = () => {
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [isAuthorized, setIsAuthorized] = useState(localStorage.getItem('melody_access_granted') === 'true');
 
-  const myGroups = allGroups.filter(g => profile && g.members.includes(profile.id));
+  useEffect(() => {
+    const loader = document.getElementById('loading-screen');
+    if (loader) {
+      loader.style.opacity = '0';
+      setTimeout(() => {
+        loader.style.visibility = 'hidden';
+      }, 800);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (profile && allUsers.length > 0) {
+      const stillExists = allUsers.find(u => u.id === profile.id);
+      if (!stillExists) {
+        localStorage.removeItem('melody_profile');
+        setProfile(null);
+        alert("Oh no! 🎀 You were removed from the kingdom registry. Please contact the Admin!");
+      }
+    }
+  }, [allUsers]);
 
   useEffect(() => {
     localStorage.setItem('melody_entries', JSON.stringify(entries));
   }, [entries]);
+
+  useEffect(() => {
+    localStorage.setItem('melody_all_users', JSON.stringify(allUsers));
+  }, [allUsers]);
 
   const addEntry = (text: string, visibility: Visibility, image?: string, decorations: Decoration[] = [], groupId?: string) => {
     if (!profile) return;
@@ -57,8 +85,19 @@ const App: React.FC = () => {
   };
 
   const handleDeleteEntry = (entryId: string) => {
-    if (confirm("Delete this sweet memory forever? 🎀")) {
+    if (confirm("Remove this memory forever? 🎀")) {
       setEntries(prev => prev.filter(e => e.id !== entryId));
+    }
+  };
+
+  const handleDeleteUser = (userId: string) => {
+    if (userId === profile?.id) {
+      alert("You can't kick yourself! 🐰👑");
+      return;
+    }
+    if (confirm("Kick this person out of the kingdom? They will lose all access immediately! 🚫")) {
+      setAllUsers(prev => prev.filter(u => u.id !== userId));
+      setEntries(prev => prev.filter(e => e.userId !== userId));
     }
   };
 
@@ -81,9 +120,7 @@ const App: React.FC = () => {
         const hasLiked = entry.likes.includes(profile.id);
         return {
           ...entry,
-          likes: hasLiked 
-            ? entry.likes.filter(id => id !== profile.id) 
-            : [...entry.likes, profile.id]
+          likes: hasLiked ? entry.likes.filter(id => id !== profile.id) : [...entry.likes, profile.id]
         };
       }
       return entry;
@@ -113,49 +150,27 @@ const App: React.FC = () => {
     const newProfile = { ...profile, ...updates };
     setProfile(newProfile);
     localStorage.setItem('melody_profile', JSON.stringify(newProfile));
+    setAllUsers(prev => prev.map(u => u.id === profile.id ? { ...u, ...updates } : u));
   };
 
-  const handleSendFriendRequest = (username: string) => {
-    alert(`🎀 Friend request sent to ${username}!`);
-  };
-
-  const handleAcceptFriend = (requestId: string) => {
+  // Fix: Implemented handleAcceptFriend to resolve the "Cannot find name 'handleAcceptFriend'" error.
+  const handleAcceptFriend = (friendId: string) => {
     if (!profile) return;
-    const newFriends = [...profile.friends, requestId];
-    const newPending = profile.pendingRequests.filter(r => r !== requestId);
-    updateProfile({ friends: newFriends, pendingRequests: newPending });
-    alert(`Yay! You have a new bestie! 💖`);
-  };
+    const updatedPending = profile.pendingRequests.filter(id => id !== friendId);
+    const updatedFriends = [...profile.friends, friendId];
+    
+    // Update local profile and storage
+    updateProfile({
+      pendingRequests: updatedPending,
+      friends: updatedFriends
+    });
 
-  const handleCreateGroup = (name: string, isPublic: boolean) => {
-    if (!profile) return;
-    const newGroup: Group = {
-      id: Date.now().toString(),
-      name,
-      members: [profile.id],
-      ownerId: profile.id,
-      isPublic
-    };
-    setAllGroups([...allGroups, newGroup]);
-    alert(`New group "${name}" created! ☁️✨`);
-  };
-
-  const handleJoinGroup = (groupId: string) => {
-    if (!profile) return;
-    setAllGroups(prev => prev.map(g => {
-      if (g.id === groupId && !g.members.includes(profile!.id)) {
-        return { ...g, members: [...g.members, profile!.id] };
+    // Also update the other user's friend list in the global allUsers state
+    setAllUsers(prev => prev.map(u => {
+      if (u.id === friendId) {
+        return { ...u, friends: [...u.friends, profile.id] };
       }
-      return g;
-    }));
-  };
-
-  const handleAddToGroup = (groupId: string, friendId: string) => {
-    setAllGroups(prev => prev.map(g => {
-      if (g.id === groupId && !g.members.includes(friendId)) {
-        return { ...g, members: [...g.members, friendId] };
-      }
-      return g;
+      return u;
     }));
   };
 
@@ -165,7 +180,7 @@ const App: React.FC = () => {
       updateProfile({ isAdmin: true });
       setIsAdminOpen(true);
     } else {
-      alert("Oops! That's not the secret admin code! 🍬");
+      alert("Wrong code! 🍬");
     }
   };
 
@@ -174,59 +189,64 @@ const App: React.FC = () => {
   }
 
   if (!profile) {
-    return <RegistrationForm onComplete={setProfile} />;
+    return <RegistrationForm onComplete={(p) => {
+      setProfile(p);
+      setAllUsers(prev => {
+        if (prev.find(u => u.id === p.id)) return prev;
+        return [...prev, p];
+      });
+    }} />;
   }
 
-  const friendsProfiles: UserProfile[] = [
-    { id: 'f1', username: 'MelodyFan', email: 'm@fan.com', pfp: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=100&h=100&fit=crop', friends: [], pendingRequests: [], lastActive: '2m ago' },
-    { id: 'f2', username: 'PinkPuff', email: 'p@puff.com', pfp: 'https://images.unsplash.com/photo-1517841905240-472988babdf9?w=100&h=100&fit=crop', friends: [], pendingRequests: [], lastActive: '5m ago' }
-  ];
+  const myGroups = allGroups.filter(g => g.members.includes(profile.id));
+  const otherUsers = allUsers.filter(u => u.id !== profile.id);
 
   return (
     <div className="min-h-screen pb-10 bg-[#fff5f7] animate-in fade-in duration-1000">
-      <nav className="sticky top-0 z-50 glass-pink border-b border-pink-100 px-6 py-4 flex items-center justify-between">
+      <nav className="sticky top-0 z-50 bg-white/70 backdrop-blur-md border-b border-pink-100 px-6 py-4 flex items-center justify-between shadow-sm">
         <div className="flex items-center space-x-3">
-          <div className="w-12 h-12 melody-gradient rounded-full flex items-center justify-center soft-3d-shadow animate-pulse">
-            <Heart className="text-white fill-white" size={24} />
+          <div className="w-10 h-10 melody-gradient rounded-full flex items-center justify-center shadow-lg">
+            <Sparkles className="text-white" size={18} />
           </div>
-          <h1 className="text-2xl font-black text-pink-500 tracking-tight hidden sm:block">My Secret Journal</h1>
+          <h1 className="text-xl font-black text-pink-500 tracking-tight flex items-center gap-2">
+            Melody Kingdom <span className="text-xs bg-pink-100 px-2 py-0.5 rounded-full text-pink-400">v1.0</span>
+          </h1>
         </div>
 
-        <div className="flex items-center space-x-4">
+        <div className="flex items-center space-x-3">
           <button 
             onClick={handleOpenAdmin} 
-            className={`p-3 rounded-full transition-all flex items-center gap-2 ${profile.isAdmin ? 'text-pink-600 bg-pink-100' : 'text-pink-300 hover:bg-pink-50'}`} 
-            title="Admin Hub"
+            className={`p-2.5 rounded-full transition-all hover:scale-110 active:scale-90 ${profile.isAdmin ? 'text-pink-600 bg-pink-100' : 'text-pink-200'}`}
           >
             <ShieldAlert size={22} />
           </button>
-          <div className="flex items-center space-x-2 pl-2 border-l border-pink-100 cursor-pointer hover:opacity-80 transition-opacity" onClick={() => setIsProfileOpen(true)}>
-            <img src={profile.pfp} className="w-10 h-10 rounded-full border-2 border-pink-200 object-cover" alt="profile" />
-            <span className="font-bold text-pink-600 hidden md:block">{profile.username}</span>
-          </div>
+          <div className="h-8 w-px bg-pink-100 mx-1"></div>
+          <img 
+            src={profile.pfp} 
+            className="w-10 h-10 rounded-full border-2 border-pink-200 cursor-pointer hover:border-pink-400 transition-all object-cover shadow-sm" 
+            onClick={() => setIsProfileOpen(true)}
+            alt="me" 
+          />
         </div>
       </nav>
 
-      <main className="container mx-auto px-4 mt-8 flex flex-col xl:flex-row gap-8">
+      <main className="container mx-auto px-4 mt-8 flex flex-col xl:flex-row gap-8 max-w-7xl">
         <div className="flex-1 space-y-8">
-          <section>
-            <CloudDiaryEditor onPost={addEntry} initialText={replyTarget || ''} />
-          </section>
-
-          <section>
-            <div className="flex items-center justify-between mb-8 max-w-4xl mx-auto px-4">
-              <h2 className="text-3xl font-black text-pink-700">Entries</h2>
-            </div>
-            <DiaryList 
-              entries={entries.filter(e => e.visibility !== 'group')} 
-              currentUserId={profile.id} 
-              isAdmin={profile.isAdmin}
-              onLike={handleLikeEntry}
-              onReply={handleReplyToEntry}
-              onDelete={handleDeleteEntry}
-              onAddComment={handleAddComment}
-            />
-          </section>
+          <CloudDiaryEditor onPost={addEntry} initialText={replyTarget || ''} />
+          <div className="flex items-center gap-4 px-4">
+             <div className="h-px flex-1 bg-pink-100"></div>
+             <Heart className="text-pink-200 fill-pink-200" size={16} />
+             <div className="h-px flex-1 bg-pink-100"></div>
+          </div>
+          <DiaryList 
+            entries={entries.filter(e => e.visibility !== 'group')} 
+            currentUserId={profile.id} 
+            isAdmin={profile.isAdmin}
+            onLike={handleLikeEntry}
+            onReply={handleReplyToEntry}
+            onDelete={handleDeleteEntry}
+            onAddComment={handleAddComment}
+          />
         </div>
 
         <SocialHub 
@@ -234,18 +254,21 @@ const App: React.FC = () => {
           messages={messages} 
           groups={myGroups}
           allEntries={entries}
-          friendsProfiles={friendsProfiles}
+          friendsProfiles={otherUsers}
           onSendMessage={handleSendMessage}
           onAcceptFriend={handleAcceptFriend}
-          onSendRequest={handleSendFriendRequest}
-          onCreateGroup={handleCreateGroup}
-          onAddToGroup={handleAddToGroup}
+          onSendRequest={(u) => alert(`Sweet! Request sent to ${u} 🎀`)}
+          onCreateGroup={(n) => {
+            const newG: Group = { id: Date.now().toString(), name: n, members: [profile.id], ownerId: profile.id, isPublic: false };
+            setAllGroups([...allGroups, newG]);
+          }}
+          onAddToGroup={() => {}}
           onPostToGroup={addEntry}
           onDeleteEntry={handleDeleteEntry}
         />
       </main>
 
-      {isAdminOpen && <AdminDashboard users={[profile, ...friendsProfiles]} onClose={() => setIsAdminOpen(false)} />}
+      {isAdminOpen && <AdminDashboard users={allUsers} onDeleteUser={handleDeleteUser} onClose={() => setIsAdminOpen(false)} />}
       {isProfileOpen && <ProfileModal profile={profile} onSave={updateProfile} onClose={() => setIsProfileOpen(false)} />}
     </div>
   );
