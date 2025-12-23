@@ -13,19 +13,25 @@ import { Heart, ShieldAlert, Sparkles } from 'lucide-react';
 const PRIVATE_SECRET_KEY = "2010";
 const ADMIN_CODE = "1803";
 
-const App: React.FC = () => {
-  const savedProfile = localStorage.getItem('melody_profile');
-  const [profile, setProfile] = useState<UserProfile | null>(savedProfile ? JSON.parse(savedProfile) : null);
-  
-  const [allUsers, setAllUsers] = useState<UserProfile[]>(() => {
-    const saved = localStorage.getItem('melody_all_users');
-    return saved ? JSON.parse(saved) : [];
-  });
+// Helper for safe JSON parsing
+const safeParse = <T,>(key: string, fallback: T): T => {
+  try {
+    const val = localStorage.getItem(key);
+    if (!val || val === "undefined") return fallback;
+    return JSON.parse(val) as T;
+  } catch (e) {
+    console.error(`Error parsing ${key}:`, e);
+    return fallback;
+  }
+};
 
-  const [entries, setEntries] = useState<DiaryEntry[]>(() => {
-    const saved = localStorage.getItem('melody_entries');
-    return saved ? JSON.parse(saved) : [];
-  });
+const App: React.FC = () => {
+  // Use safe parsing to prevent app crashes on bad storage data
+  const [profile, setProfile] = useState<UserProfile | null>(() => safeParse<UserProfile | null>('melody_profile', null));
+  
+  const [allUsers, setAllUsers] = useState<UserProfile[]>(() => safeParse<UserProfile[]>('melody_all_users', []));
+
+  const [entries, setEntries] = useState<DiaryEntry[]>(() => safeParse<DiaryEntry[]>('melody_entries', []));
   
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [allGroups, setAllGroups] = useState<Group[]>([]);
@@ -33,35 +39,54 @@ const App: React.FC = () => {
   
   const [isAdminOpen, setIsAdminOpen] = useState(false);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
-  const [isAuthorized, setIsAuthorized] = useState(localStorage.getItem('melody_access_granted') === 'true');
+  const [isAuthorized, setIsAuthorized] = useState(() => localStorage.getItem('melody_access_granted') === 'true');
 
+  // Immediate loader removal on mount
   useEffect(() => {
-    const loader = document.getElementById('loading-screen');
-    if (loader) {
-      loader.style.opacity = '0';
-      setTimeout(() => {
-        loader.style.visibility = 'hidden';
-      }, 800);
-    }
+    const removeLoader = () => {
+      const loader = document.getElementById('loading-screen');
+      if (loader) {
+        loader.style.opacity = '0';
+        setTimeout(() => {
+          loader.style.display = 'none';
+        }, 800);
+      }
+    };
+    
+    // Attempt removal immediately
+    removeLoader();
+    
+    // Also attach to window load for safety
+    window.addEventListener('load', removeLoader);
+    return () => window.removeEventListener('load', removeLoader);
   }, []);
 
-  useEffect(() => {
-    if (profile && allUsers.length > 0) {
-      const stillExists = allUsers.find(u => u.id === profile.id);
-      if (!stillExists) {
-        localStorage.removeItem('melody_profile');
-        setProfile(null);
-        alert("Oh no! 🎀 You were removed from the kingdom registry. Please contact the Admin!");
-      }
-    }
-  }, [allUsers]);
-
+  // Sync state to local storage
   useEffect(() => {
     localStorage.setItem('melody_entries', JSON.stringify(entries));
   }, [entries]);
 
   useEffect(() => {
     localStorage.setItem('melody_all_users', JSON.stringify(allUsers));
+  }, [allUsers]);
+
+  useEffect(() => {
+    if (profile) {
+      localStorage.setItem('melody_profile', JSON.stringify(profile));
+    } else {
+      localStorage.removeItem('melody_profile');
+    }
+  }, [profile]);
+
+  // Security check: Logout if kicked
+  useEffect(() => {
+    if (profile && allUsers.length > 0) {
+      const stillExists = allUsers.find(u => u.id === profile.id);
+      if (!stillExists) {
+        setProfile(null);
+        alert("Oh no! 🎀 You were removed from the kingdom registry. Please contact the Admin!");
+      }
+    }
   }, [allUsers]);
 
   const addEntry = (text: string, visibility: Visibility, image?: string, decorations: Decoration[] = [], groupId?: string) => {
@@ -149,29 +174,15 @@ const App: React.FC = () => {
     if (!profile) return;
     const newProfile = { ...profile, ...updates };
     setProfile(newProfile);
-    localStorage.setItem('melody_profile', JSON.stringify(newProfile));
     setAllUsers(prev => prev.map(u => u.id === profile.id ? { ...u, ...updates } : u));
   };
 
-  // Fix: Implemented handleAcceptFriend to resolve the "Cannot find name 'handleAcceptFriend'" error.
   const handleAcceptFriend = (friendId: string) => {
     if (!profile) return;
     const updatedPending = profile.pendingRequests.filter(id => id !== friendId);
     const updatedFriends = [...profile.friends, friendId];
-    
-    // Update local profile and storage
-    updateProfile({
-      pendingRequests: updatedPending,
-      friends: updatedFriends
-    });
-
-    // Also update the other user's friend list in the global allUsers state
-    setAllUsers(prev => prev.map(u => {
-      if (u.id === friendId) {
-        return { ...u, friends: [...u.friends, profile.id] };
-      }
-      return u;
-    }));
+    updateProfile({ pendingRequests: updatedPending, friends: updatedFriends });
+    setAllUsers(prev => prev.map(u => u.id === friendId ? { ...u, friends: [...u.friends, profile.id] } : u));
   };
 
   const handleOpenAdmin = () => {
@@ -191,10 +202,7 @@ const App: React.FC = () => {
   if (!profile) {
     return <RegistrationForm onComplete={(p) => {
       setProfile(p);
-      setAllUsers(prev => {
-        if (prev.find(u => u.id === p.id)) return prev;
-        return [...prev, p];
-      });
+      setAllUsers(prev => prev.find(u => u.id === p.id) ? prev : [...prev, p]);
     }} />;
   }
 
@@ -202,14 +210,14 @@ const App: React.FC = () => {
   const otherUsers = allUsers.filter(u => u.id !== profile.id);
 
   return (
-    <div className="min-h-screen pb-10 bg-[#fff5f7] animate-in fade-in duration-1000">
+    <div className="min-h-screen pb-10 bg-[#fff5f7]">
       <nav className="sticky top-0 z-50 bg-white/70 backdrop-blur-md border-b border-pink-100 px-6 py-4 flex items-center justify-between shadow-sm">
         <div className="flex items-center space-x-3">
           <div className="w-10 h-10 melody-gradient rounded-full flex items-center justify-center shadow-lg">
             <Sparkles className="text-white" size={18} />
           </div>
           <h1 className="text-xl font-black text-pink-500 tracking-tight flex items-center gap-2">
-            Melody Kingdom <span className="text-xs bg-pink-100 px-2 py-0.5 rounded-full text-pink-400">v1.0</span>
+            Melody Kingdom <span className="text-xs bg-pink-100 px-2 py-0.5 rounded-full text-pink-400">v1.1</span>
           </h1>
         </div>
 
@@ -230,7 +238,7 @@ const App: React.FC = () => {
         </div>
       </nav>
 
-      <main className="container mx-auto px-4 mt-8 flex flex-col xl:flex-row gap-8 max-w-7xl">
+      <main className="container mx-auto px-4 mt-8 flex flex-col xl:flex-row gap-8 max-w-7xl animate-in fade-in duration-500">
         <div className="flex-1 space-y-8">
           <CloudDiaryEditor onPost={addEntry} initialText={replyTarget || ''} />
           <div className="flex items-center gap-4 px-4">
@@ -239,7 +247,7 @@ const App: React.FC = () => {
              <div className="h-px flex-1 bg-pink-100"></div>
           </div>
           <DiaryList 
-            entries={entries.filter(e => e.visibility !== 'group')} 
+            entries={entries.filter(e => e.visibility !== 'group' && (e.visibility === 'public' || e.userId === profile.id))} 
             currentUserId={profile.id} 
             isAdmin={profile.isAdmin}
             onLike={handleLikeEntry}
